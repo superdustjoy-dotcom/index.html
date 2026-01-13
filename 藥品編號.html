@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>中藥品項查詢與編輯系統</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 20px; background: #f9f9f9; color: #333; }
+    h1 { text-align: center; color: #2c3e50; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    .search-box { display: flex; gap: 12px; margin: 20px 0; flex-wrap: wrap; }
+    input, button { padding: 10px 14px; font-size: 16px; border-radius: 6px; border: 1px solid #ccc; }
+    button { background: #3498db; color: white; border: none; cursor: pointer; }
+    button:hover { background: #2980b9; }
+    #addBtn { background: #27ae60; }
+    #addBtn:hover { background: #219653; }
+    table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-top: 10px; }
+    th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }
+    th { background: #34495e; color: white; cursor: pointer; }
+    tr:hover { background: #f1faff; }
+    .edit-btn, .save-btn, .cancel-btn { padding: 6px 12px; font-size: 14px; margin-right: 6px; border: none; border-radius: 4px; cursor: pointer; }
+    .edit-btn { background: #f39c12; color: white; }
+    .save-btn { background: #27ae60; color: white; }
+    .cancel-btn{ background: #e74c3c; color: white; }
+    .actions { white-space: nowrap; }
+    .highlight { background: #fffacd; font-weight: bold; }
+    #status { margin: 10px 0; padding: 10px; border-radius: 6px; display: none; }
+    .success { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>中藥品項查詢與編輯系統</h1>
+  <div class="search-box">
+    <input type="text" id="searchCode" placeholder="輸入編號查詢（如 B005H、G259）" style="flex:1;" />
+    <input type="text" id="searchName" placeholder="輸入品名關鍵字（如 六味地黃、補中益氣、清冠）" style="flex:2;" />
+    <button onclick="search()">搜尋</button>
+    <button id="addBtn" onclick="showAddForm()">新增品項</button>
+    <button onclick="resetSearch()">顯示全部</button>
+  </div>
+  <div id="addForm" style="display:none; margin:20px 0; padding:15px; background:#fff; border:1px solid #ddd; border-radius:8px;">
+    <h3>新增 / 編輯品項</h3>
+    <input type="text" id="editCode" placeholder="編號（必填）" style="width:200px;" />
+    <input type="text" id="editName" placeholder="完整品名" style="width:500px;" />
+    <div style="margin-top:12px;">
+      <button class="save-btn" onclick="saveItem()">儲存</button>
+      <button class="cancel-btn" onclick="hideAddForm()">取消</button>
+    </div>
+  </div>
+  <div id="status"></div>
+  <table id="itemTable">
+    <thead>
+      <tr>
+        <th onclick="sortTable(0)">編號</th>
+        <th onclick="sortTable(1)">品名</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
+<script>
+// 完整資料（已從你的清單去重複、整理）
+let items = [
+  {code:"B005H", name:"六味地黃丸丸劑"},
+  {code:"B005HA", name:"六味地黃丸丸劑"},
+  {code:"B005HH", name:"六味地黃丸丸劑"},
+  {code:"B006H", name:"固腎丸(八味地黃丸)丸劑"},
+  {code:"B010", name:"天王補心丸(去硃砂)丸劑"},
+  {code:"B123", name:"清目丸(滋腎明目丸)丸劑"},
+  {code:"B229H", name:"杞菊地黃丸丸劑"},
+  {code:"B284", name:"順天堂加味四物丸(參仲四物丸)丸劑"},
+  {code:"B288", name:"通腸丸(潤腸丸)丸劑"},
+  {code:"B335", name:"龜鹿二仙丸丸劑"},
+  {code:"B335A", name:"龜鹿二仙丸丸劑"},
+  {code:"B335J", name:"順天堂活力勇骨丸(龜鹿二仙丸)丸劑"},
+  {code:"B337", name:"養肝丸丸劑"},
+  {code:"B337J", name:"養肝丸丸劑"},
+  {code:"B339", name:"七寶美髯丹丸丸劑"},
+  {code:"B339H", name:"七寶美髯丹丸丸劑"},
+  {code:"B346", name:"養血壯筋健步丸(去虎骨)丸劑"},
+  {code:"B348", name:"延齡固本丹丸丸劑"},
+  {code:"B354", name:"斑龍丸丸劑"},
+  {code:"B354H", name:"斑龍丸丸劑"},
+  {code:"BD-01", name:"YIV-906"},
+  {code:"BD-01A", name:"YIV-906"},
+  {code:"C259HH", name:"血府逐瘀湯"},
+  {code:"CA017", name:"清肺排毒湯"},
+  {code:"CA020", name:"血府逐瘀湯Placebo"},
+  {code:"CB039", name:"冬蟲夏草菌絲體膠囊"},
+  {code:"CHS467D", name:"靈芝菌絲體膠囊"},
+  {code:"CHS476C", name:"冬蟲夏草菌絲體膠囊"},
+  {code:"CHS490", name:"紅麴膠囊"},
+  {code:"CSB221", name:"SB221"},
+  {code:"DC335J", name:"極品龜鹿散(白參)傳統膠囊"},
+  {code:"DP335J", name:"極品龜鹿(白參)散(龜鹿二仙膠)散劑"},
+  {code:"DP353", name:"張步桃腸胃散(平胃散)散劑"},
+  {code:"DPH12", name:"小兒開胃健脾糊散"},
+  {code:"DT005H", name:"六味地黃丸傳統錠"},
+  {code:"F005ZH", name:"Firm Foundation/Revamin"},
+  {code:"F098ZH", name:"Heartburn Buster/Digestin"},
+  {code:"F113Z", name:"Nature Renew/Acnemin"},
+  {code:"F114ZH", name:"舒壓解鬱(加味逍遙散)"},
+  {code:"F128Z", name:"Free & Easy/Estemin"},
+  {code:"F176Z", name:"Sweet Dream/Dreamcare"},
+  {code:"F348", name:"順天堂活力不老(延齡固本丹)"},
+  {code:"FB161A", name:"寶頂(高劑量)Placebo"},
+  {code:"FB167A", name:"極品寶頂女性適用(淺粉紅色)"},
+  {code:"FB171A", name:"極品寶頂男性適用"},
+  {code:"FB171B", name:"極品寶頂女性適用"},
+  {code:"FB171C", name:"極品寶頂(BeauTop)"},
+  {code:"G001HH", name:"補中益氣湯"},
+  {code:"G001HZ", name:"補中益氣湯"},
+  {code:"G001KA", name:"補中益氣湯"},
+  {code:"G002H", name:"四物湯"},
+  {code:"G002HA", name:"四物湯"},
+  {code:"G002JJ", name:"悅來順"},
+  {code:"G002LA", name:"四物湯"},
+  {code:"G003HH", name:"歸脾湯"},
+  {code:"G003HY", name:"歸脾湯"},
+  {code:"G003HZ", name:"歸脾湯"},
+  {code:"G004H", name:"炙甘草湯"},
+  {code:"G004HH", name:"炙甘草湯"},
+  {code:"G005HA", name:"六味地黃丸"},
+  {code:"G005HH", name:"六味地黃丸"},
+  {code:"G005HZ", name:"六味地黃丸"},
+  {code:"G006HA", name:"八味地黃丸"},
+  {code:"G006HH", name:"八味地黃丸"},
+  {code:"G006HZ", name:"八味地黃丸"},
+  {code:"G008HA", name:"小建中湯"},
+  {code:"G008HH", name:"小建中湯"},
+  {code:"G008HZ", name:"小建中湯"},
+  {code:"G009H", name:"參苓白朮散"},
+  {code:"G009HA", name:"參苓白朮散"},
+  {code:"G009HH", name:"參苓白朮散"},
+  {code:"G009HZ", name:"參苓白朮散"},
+  {code:"G010", name:"天王補心丹"},
+  {code:"G010JJ", name:"天王補心丹(世醫得效方)"},
+  {code:"G010Z", name:"天王補心丹"},
+  {code:"G011H", name:"十全大補湯"},
+  {code:"G011HH", name:"十全大補湯"},
+  {code:"G011Z", name:"十全大補湯"},
+  {code:"G012H", name:"麻黃湯"},
+  {code:"G012Z", name:"麻黃湯"},
+  {code:"G013H", name:"桂枝湯"},
+  {code:"G013HA", name:"桂枝湯"},
+  {code:"G013HB", name:"桂枝湯"},
+  {code:"G013HH", name:"桂枝湯"},
+  {code:"G013Z", name:"桂枝湯"},
+  {code:"G014HA", name:"葛根湯"},
+  {code:"G014HH", name:"葛根湯"},
+  {code:"G014HZ", name:"葛根湯"},
+  {code:"G014KA", name:"葛根湯(OTC)"},
+  {code:"G015HA", name:"桑菊飲"},
+  {code:"G015HH", name:"桑菊飲"},
+  {code:"G015HZ", name:"桑菊飲"},
+  {code:"G018HA", name:"小青龍湯"},
+  {code:"G018HH", name:"小青龍湯"},
+  {code:"G018KA", name:"小青龍湯(OTC)"},
+  {code:"G019H", name:"柴葛解肌湯"},
+  {code:"G019HA", name:"柴葛解肌湯"},
+  {code:"G019HB", name:"柴葛解肌湯"},
+  {code:"G019HH", name:"柴葛解肌湯"},
+  {code:"G020H", name:"九味羌活湯"},
+  {code:"G020HH", name:"九味羌活湯"},
+  {code:"G021H", name:"十神湯"},
+  {code:"G021HH", name:"十神湯"},
+  {code:"G022HA", name:"川芎茶調散"},
+  {code:"G022HB", name:"川芎茶調散"},
+  {code:"G022HH", name:"川芎茶調散"},
+  {code:"G023JA", name:"十味敗毒散"},
+  {code:"G023JJ", name:"十味敗毒散"},
+  {code:"G026JA", name:"清鼻湯"},
+  {code:"G026JJ", name:"清鼻湯"},
+  {code:"G027HA", name:"大柴胡湯"},
+  {code:"G027HH", name:"大柴胡湯"},
+  {code:"G027HZ", name:"大柴胡湯"},
+  {code:"G028H", name:"防風通聖散"},
+  {code:"G028HA", name:"防風通聖散"},
+  {code:"G028HH", name:"防風通聖散"},
+  {code:"G028Z", name:"防風通聖散"},
+  {code:"G029HH", name:"葛根黃芩黃連湯"},
+  {code:"G033HH", name:"小柴胡湯"},
+  {code:"G033HZ", name:"小柴胡湯"},
+  {code:"G034HA", name:"逍遙散"},
+  {code:"G034HH", name:"逍遙散"},
+  {code:"G034HZ", name:"逍遙散"},
+  {code:"G034LA", name:"逍遙散"},
+  {code:"G037HA", name:"芍藥甘草湯"},
+  {code:"G037HH", name:"芍藥甘草湯"},
+  {code:"G037HZ", name:"芍藥甘草湯"},
+  {code:"G038", name:"柴胡桂枝湯"},
+  {code:"G038HH", name:"柴胡桂枝湯"},
+  {code:"G038Z", name:"柴胡桂枝湯"},
+  {code:"G039", name:"柴胡加龍骨牡蠣湯"},
+  {code:"G039HH", name:"柴胡加龍骨牡蠣湯"},
+  {code:"G039Z", name:"柴胡加龍骨牡蠣湯"},
+  {code:"G040H", name:"半夏厚朴湯"},
+  {code:"G040HA", name:"半夏厚朴湯"},
+  {code:"G040HH", name:"半夏厚朴湯"},
+  {code:"G040Z", name:"半夏厚朴湯"},
+  {code:"G042H", name:"定喘湯"},
+  {code:"G042HA", name:"定喘湯"},
+  {code:"G042HB", name:"定喘湯"},
+  {code:"G042HH", name:"定喘湯"},
+  {code:"G043H", name:"桃核承氣湯"},
+  {code:"G043HA", name:"桃核承氣湯"},
+  {code:"G043HB", name:"桃核承氣湯"},
+  {code:"G043HH", name:"桃核承氣湯"},
+  {code:"G043Z", name:"桃核承氣湯"},
+  {code:"G044HA", name:"桂枝茯苓丸"},
+  {code:"G044HH", name:"桂枝茯苓丸"},
+  {code:"G044HZ", name:"桂枝茯苓丸"},
+  {code:"G045HA", name:"當歸芍藥散"},
+  {code:"G045HH", name:"當歸芍藥散"},
+  {code:"G045HZ", name:"當歸芍藥散"},
+  {code:"G047H", name:"人參養榮湯"},
+  {code:"G047HH", name:"人參養榮湯"},
+  {code:"G047Z", name:"人參養榮湯"},
+  {code:"G049HH", name:"芎歸膠艾湯"},
+  {code:"G050HA", name:"真武湯"},
+  {code:"G050HH", name:"真武湯"},
+  {code:"G050HZ", name:"真武湯"},
+  {code:"G055HA", name:"藿香正氣散"},
+  {code:"G055HH", name:"藿香正氣散"},
+  {code:"G055HZ", name:"藿香正氣散"},
+  {code:"G055KA", name:"藿香正氣散"},
+  {code:"G056H", name:"清暑益氣湯"},
+  {code:"G056HH", name:"清暑益氣湯"},
+  {code:"G057", name:"胃苓湯"},
+  {code:"G057HA", name:"胃苓湯"},
+  {code:"G057HH", name:"胃苓湯"},
+  {code:"G057Z", name:"胃苓湯"},
+  {code:"G058", name:"五苓散"},
+  {code:"G058HH", name:"五苓散"},
+  {code:"G058JA", name:"五苓散"},
+  {code:"G058Z", name:"五苓散"},
+  {code:"G059H", name:"豬苓湯"},
+  {code:"G059HH", name:"豬苓湯"},
+  {code:"G059Z", name:"豬苓湯"},
+  {code:"G060", name:"越婢加朮湯"},
+  {code:"G061", name:"苓桂朮甘湯"},
+  {code:"G061HA", name:"苓桂朮甘湯"},
+  {code:"G061HH", name:"苓桂朮甘湯"},
+  {code:"G061HZ", name:"苓桂朮甘湯"},
+  {code:"G063HH", name:"八正散"},
+  {code:"G066J", name:"麥門冬湯"},
+  {code:"G066Z", name:"麥門冬湯"},
+  {code:"G067HA", name:"黃連解毒湯"},
+  {code:"G067HH", name:"黃連解毒湯"},
+  {code:"G067HZ", name:"黃連解毒湯"},
+  {code:"G068H", name:"涼膈散"},
+  {code:"G068HH", name:"涼膈散"},
+  {code:"G070H", name:"竹葉石膏湯"},
+  {code:"G070HH", name:"竹葉石膏湯"},
+  {code:"G071HH", name:"半夏瀉心湯"},
+  {code:"G071HZ", name:"半夏瀉心湯"},
+  {code:"G074HA", name:"辛夷散"},
+  {code:"G074HH", name:"辛夷散"},
+  {code:"G074MA", name:"辛夷散(去細辛)"},
+  {code:"G075D", name:"甘露飲(新加坡-余仁生)"},
+  {code:"G075E", name:"甘露飲(香港-余仁生)"},
+  {code:"G075HA", name:"甘露飲"},
+  {code:"G075HH", name:"甘露飲"},
+  {code:"G075KA", name:"甘露飲"},
+  {code:"G075KB", name:"甘露飲"},
+  {code:"G077HA", name:"龍膽瀉肝湯"},
+  {code:"G077HH", name:"龍膽瀉肝湯"},
+  {code:"G077HZ", name:"龍膽瀉肝湯"},
+  {code:"G078HH", name:"乙字湯"},
+  {code:"G079H", name:"清心蓮子飲"},
+  {code:"G079HA", name:"清心蓮子飲"},
+  {code:"G079HH", name:"清心蓮子飲"},
+  {code:"G080HA", name:"平胃散"},
+  {code:"G080HH", name:"平胃散"},
+  {code:"G080HZ", name:"平胃散"},
+  {code:"G081H", name:"安中散"},
+  {code:"G081HA", name:"安中散"},
+  {code:"G082HH", name:"六君子湯"},
+  {code:"G082HZ", name:"六君子湯"},
+  {code:"G084JJ", name:"理中湯"},
+  {code:"G086HA", name:"麻杏甘石湯"},
+  {code:"G086HH", name:"麻杏甘石湯"},
+  {code:"G086HZ", name:"麻杏甘石湯"},
+  {code:"G091", name:"麻子仁丸"},
+  {code:"G091JA", name:"麻子仁丸"},
+  {code:"G091Z", name:"麻子仁丸"},
+  {code:"G092H", name:"八珍湯"},
+  {code:"G092HH", name:"八珍湯"},
+  {code:"G092Z", name:"八珍湯"},
+  {code:"G093HH", name:"四君子湯"},
+  {code:"G093HZ", name:"四君子湯"},
+  {code:"G094HA", name:"百合固金湯"},
+  {code:"G094HH", name:"百合固金湯"},
+  {code:"G094HZ", name:"百合固金湯"},
+  {code:"G095HA", name:"知柏地黃丸"},
+  {code:"G095HH", name:"知柏地黃丸"},
+  {code:"G095HZ", name:"知柏地黃丸"},
+  {code:"G098HH", name:"香砂六君子湯"},
+  {code:"G098HZ", name:"香砂六君子湯"},
+  {code:"G098KA", name:"香砂六君子湯"},
+  {code:"G105H", name:"荊防敗毒散"},
+  {code:"G105HA", name:"荊防敗毒散"},
+  {code:"G105HH", name:"荊防敗毒散"},
+  {code:"G106", name:"銀翹散"},
+  {code:"G106A", name:"銀翹散(余仁生)"},
+  {code:"G106HA", name:"銀翹散"},
+  {code:"G106HB", name:"銀翹散"},
+  {code:"G106HH", name:"銀翹散"},
+  {code:"G106HZ", name:"銀翹散"},
+  {code:"G106KA", name:"銀翹散"},
+  {code:"G112H", name:"參蘇飲"},
+  {code:"G112HH", name:"參蘇飲"},
+  {code:"G113J", name:"清上防風湯"},
+  {code:"G113JA", name:"清上防風湯"},
+  {code:"G113JJ", name:"清上防風湯"},
+  {code:"G114HA", name:"加味逍遙散"},
+  {code:"G114HB", name:"加味逍遙散"},
+  {code:"G114HH", name:"加味逍遙散"},
+  {code:"G114HZ", name:"加味逍遙散"},
+  {code:"G114KA", name:"加味逍遙散"},
+  {code:"G116HA", name:"柴胡清肝湯"},
+  {code:"G116HH", name:"柴胡清肝湯"},
+  {code:"G117", name:"桂枝加龍骨牡蠣湯"},
+  {code:"G117JA", name:"桂枝加龍骨牡蠣湯"},
+  {code:"G117Z", name:"桂枝加龍骨牡蠣湯"},
+  {code:"G118H", name:"上中下通用痛風丸"},
+  {code:"G129H", name:"烏藥順氣散"},
+  {code:"G130", name:"旋覆代赭石湯"},
+  {code:"G130HH", name:"旋覆代赭石湯"},
+  {code:"G131H", name:"鈎藤散"},
+  {code:"G131HH", name:"鈎藤散"},
+  {code:"G132HH", name:"溫清飲"},
+  {code:"G133HA", name:"疏經活血湯"},
+  {code:"G133HH", name:"疏經活血湯"},
+  {code:"G133HY", name:"疏經活血湯"},
+  {code:"G133HZ", name:"疏經活血湯"},
+  {code:"G134HH", name:"養心湯"},
+  {code:"G136", name:"三黃瀉心湯"},
+  {code:"G136HH", name:"三黃瀉心湯"},
+  {code:"G138HH", name:"白虎加人參湯"},
+  {code:"G139HA", name:"清胃散"},
+  {code:"G139HH", name:"清胃散"},
+  {code:"G140HA", name:"清肺湯"},
+  {code:"G140HH", name:"清肺湯"},
+  {code:"G140HZ", name:"清肺湯"},
+  {code:"G141HH", name:"普濟消毒飲"},
+  {code:"G141HZ", name:"普濟消毒飲"},
+  {code:"G142HA", name:"蒼耳散"},
+  {code:"G142HH", name:"蒼耳散"},
+  {code:"G142HZ", name:"蒼耳散"},
+  {code:"G143H", name:"導赤散"},
+  {code:"G144JJ", name:"柴陷湯"},
+  {code:"G145H", name:"二陳湯"},
+  {code:"G145HA", name:"二陳湯"},
+  {code:"G145HH", name:"二陳湯"},
+  {code:"G145Z", name:"二陳湯"},
+  {code:"G146", name:"半夏白朮天麻湯"},
+  {code:"G146HA", name:"半夏天麻白朮湯"},
+  {code:"G146HH", name:"半夏天麻白朮湯"},
+  {code:"G146Z", name:"半夏白朮天麻湯"},
+  {code:"G149H", name:"溫膽湯"},
+  {code:"G149HA", name:"溫膽湯"},
+  {code:"G149HH", name:"溫膽湯"},
+  {code:"G149Z", name:"溫膽湯"},
+  {code:"G150HH", name:"華蓋散"},
+  {code:"G151", name:"真人活命飲(去穿山甲)"},
+  {code:"G151JA", name:"真人活命飲(去穿山甲)"},
+  {code:"G151JJ", name:"真人活命飲(去穿山甲)"},
+  {code:"G154H", name:"散腫潰堅湯"},
+  {code:"G154HA", name:"散腫潰堅湯"},
+  {code:"G154HH", name:"散腫潰堅湯"},
+  {code:"G156HA", name:"當歸四逆湯"},
+  {code:"G156HH", name:"當歸四逆湯"},
+  {code:"G162H", name:"甘麥大棗湯"},
+  {code:"G162HA", name:"甘麥大棗湯"},
+  {code:"G162HB", name:"甘麥大棗湯"},
+  {code:"G162HH", name:"甘麥大棗湯"},
+  {code:"G162Z", name:"甘麥大棗湯"},
+  {code:"G164H", name:"消風散"},
+  {code:"G164HA", name:"消風散"},
+  {code:"G164HH", name:"消風散"},
+  {code:"G164Z", name:"消風散"},
+  {code:"G165HH", name:"溫經湯"},
+  {code:"G165HZ", name:"溫經湯"},
+  {code:"G166HA", name:"獨活寄生湯"},
+  {code:"G166HH", name:"獨活寄生湯"},
+  {code:"G166M", name:"獨活寄生湯(加減方)"},
+  {code:"G171HH", name:"茵陳五苓散"},
+  {code:"G173", name:"樂適舒(W.T.T.C.)"},
+  {code:"G173J", name:"樂適舒(W.T.T.C.)"},
+  {code:"G173JJ", name:"樂適舒 W.T.T.C."},
+  {code:"G174H", name:"杏蘇散"},
+  {code:"G174HA", name:"杏蘇散"},
+  {code:"G174HH", name:"杏蘇散"},
+  {code:"G174Z", name:"杏蘇散"},
+  {code:"G175HH", name:"清燥救肺湯"},
+  {code:"G176", name:"酸棗仁湯"},
+  {code:"G176A", name:"酸棗仁湯(余仁生)"},
+  {code:"G176JA", name:"酸棗仁湯"},
+  {code:"G176JJ", name:"酸棗仁湯"},
+  {code:"G176KA", name:"酸棗仁湯"},
+  {code:"G176Z", name:"酸棗仁湯"},
+  {code:"G177HH", name:"金鎖固精丸"},
+  {code:"G178H", name:"桑螵蛸散"},
+  {code:"G178HH", name:"桑螵蛸散"},
+  {code:"G178Z", name:"桑螵蛸散"},
+  {code:"G179", name:"當歸拈痛湯"},
+  {code:"G179HH", name:"當歸拈痛湯"},
+  {code:"G185", name:"寧嗽丸"},
+  {code:"G185HH", name:"寧嗽丸"},
+  {code:"G187H", name:"荊芥連翹湯"},
+  {code:"G187HH", name:"荊芥連翹湯"},
+  {code:"G187HZ", name:"荊芥連翹湯"},
+  {code:"G188", name:"清咽利膈湯"},
+  {code:"G188JJ", name:"清咽利膈湯"},
+  {code:"G216", name:"響聲破笛丸"},
+  {code:"G220HH", name:"蠲痹湯"},
+  {code:"G220HZ", name:"蠲痹湯"},
+  {code:"G222H", name:"四逆散"},
+  {code:"G222HA", name:"四逆散"},
+  {code:"G222Z", name:"四逆散"},
+  {code:"G223", name:"四逆湯"},
+  {code:"G223HA", name:"四逆湯"},
+  {code:"G223Z", name:"四逆湯"},
+  {code:"G225A", name:"止嗽散(余仁生)"},
+  {code:"G225HA", name:"止嗽散"},
+  {code:"G225HH", name:"止嗽散"},
+  {code:"G225HZ", name:"止嗽散"},
+  {code:"G225KA", name:"止嗽散"},
+  {code:"G229HA", name:"杞菊地黃丸"},
+  {code:"G229HH", name:"杞菊地黃丸"},
+  {code:"G229HZ", name:"杞菊地黃丸"},
+  {code:"G233H", name:"麻黃附子細辛湯"},
+  {code:"G233HA", name:"麻黃附子細辛湯"},
+  {code:"G233HH", name:"麻黃附子細辛湯"},
+  {code:"G234HA", name:"還少丹"},
+  {code:"G234HH", name:"還少丹"},
+  {code:"G234HZ", name:"還少丹"},
+  {code:"G235HA", name:"辛夷清肺湯"},
+  {code:"G235HH", name:"辛夷清肺湯"},
+  {code:"G235HZ", name:"辛夷清肺湯"},
+  {code:"G248", name:"杏蘇飲(幼科)"},
+  {code:"G248JA", name:"杏蘇飲(幼科)"},
+  {code:"G248JJ", name:"杏蘇飲(幼科)"},
+  {code:"G251HH", name:"調胃承氣湯"},
+  {code:"G254H", name:"濟生腎氣丸"},
+  {code:"G254HA", name:"濟生腎氣丸"},
+  {code:"G254HH", name:"濟生腎氣丸"},
+  {code:"G255HA", name:"玉屏風散"},
+  {code:"G255HH", name:"玉屏風散"},
+  {code:"G255HZ", name:"玉屏風散"},
+  {code:"G255LA", name:"玉屏風散"},
+  {code:"G259HA", name:"血府逐瘀湯"},
+  {code:"G259HH", name:"血府逐瘀湯"},
+  {code:"G259HZ", name:"血府逐瘀湯"},
+  {code:"G260HA", name:"黃耆五物湯"},
+  {code:"G260HH", name:"黃耆五物湯"},
+  {code:"G260HZ", name:"黃耆五物湯"},
+  {code:"G262H", name:"完帶湯"},
+  {code:"G263H", name:"正骨紫金丹"},
+  {code:"G263HH", name:"正骨紫金丹"},
+  {code:"G264HH", name:"補陽還五湯"},
+  {code:"G264HZ", name:"補陽還五湯"},
+  {code:"G270HA", name:"潤腸湯"},
+  {code:"G270HH", name:"潤腸湯"},
+  {code:"G270HZ", name:"潤腸湯"},
+  {code:"G270JA", name:"潤腸丸"},
+  {code:"G275", name:"柴胡疏肝湯"},
+  {code:"G275H", name:"柴胡疏肝湯"},
+  {code:"G275JA", name:"柴胡疏肝湯"},
+  {code:"G275JJ", name:"柴胡疏肝湯"},
+  {code:"G275Z", name:"柴胡疏肝湯"},
+  {code:"G276H", name:"甘露消毒丹"},
+  {code:"G276HA", name:"甘露消毒丹"},
+  {code:"G276HH", name:"甘露消毒丹"},
+  {code:"G277HA", name:"保和丸"},
+  {code:"G277HH", name:"保和丸"},
+  {code:"G277HZ", name:"保和丸"},
+  {code:"G277LA", name:"保和丸"},
+  {code:"G283H", name:"瓜蔞枳實湯"},
+  {code:"G293JJ", name:"複方丹參片"},
+  {code:"G301H", name:"桃紅四物湯"},
+  {code:"G301HH", name:"桃紅四物湯"},
+  {code:"G301Z", name:"桃紅四物湯"},
+  {code:"G303", name:"少腹逐瘀湯"},
+  {code:"G303JJ", name:"少腹逐瘀湯"},
+  {code:"G303Z", name:"少腹逐瘀湯"},
+  {code:"G305", name:"身痛逐瘀湯"},
+  {code:"G305JA", name:"身痛逐瘀湯"},
+  {code:"G305Z", name:"身痛逐瘀湯"},
+  {code:"G306JJ", name:"沙參麥冬湯"},
+  {code:"G306JZ", name:"沙參麥冬湯"},
+  {code:"G307JA", name:"天麻鈎藤飲"},
+  {code:"G307JJ", name:"天麻鈎藤飲"},
+  {code:"G307JZ", name:"天麻鈎藤飲"},
+  {code:"G308", name:"生脈散"},
+  {code:"G308Z", name:"生脈散"},
+  {code:"G318", name:"右歸丸"},
+  {code:"G318JA", name:"右歸丸"},
+  {code:"G318JJ", name:"右歸丸"},
+  {code:"G318Z", name:"右歸丸"},
+  {code:"G319", name:"左歸丸"},
+  {code:"G319JA", name:"左歸丸"},
+  {code:"G319JJ", name:"左歸丸"},
+  {code:"G319Z", name:"左歸丸"},
+  {code:"G335", name:"龜鹿二仙膠"},
+  {code:"G335JJ", name:"龜鹿二仙膠"},
+  {code:"G335KA", name:"龜鹿二仙膠(白參)"},
+  {code:"G338", name:"葛根湯去麻黃"},
+  {code:"G345", name:"定經湯"},
+  {code:"G345JJ", name:"定經湯"},
+  {code:"GA007", name:"通絡 BC 147"},
+  {code:"GA010", name:"小青龍湯 154M"},
+  {code:"GA011", name:"益氣 EN261"},
+  {code:"GA012", name:"護葉飲"},
+  {code:"GA013", name:"RespireAid臺灣清冠一號"},
+  {code:"GA013A", name:"SG02"},
+  {code:"GA014", name:"牛皮癬片"},
+  {code:"GA014J", name:"紫白散(牛皮癬片)"},
+  {code:"GA015", name:"蠲痛"},
+  {code:"GA017", name:"清肺排毒湯(UCLA)"},
+  {code:"GA018", name:"益壽生脈飲"},
+  {code:"GB171", name:"寶頂 (Beau Top)"},
+  {code:"GB171F", name:"寶頂"},
+  {code:"GD051", name:"首烏片"},
+  {code:"GH05", name:"EYS Product III (H4H Hair Form)"},
+  {code:"GH05J", name:"髮寶 Product 3 (H4H Hair Formula)"},
+  {code:"GH06", name:"Product 7 (Spot Whitening Granules)"},
+  {code:"GH06J", name:"美白去斑寶 Product 7 (Spot Whitening Granules)"},
+  {code:"GH06JA", name:"美白去斑寶 Product 7 (Spot Whitening Granules)"},
+  {code:"GH07", name:"健脾袪濕飲"},
+  {code:"GH11", name:"健脾祛濕飲"},
+  {code:"GH12", name:"小兒開胃健脾糊"},
+  {code:"GS001R", name:"麻黃"},
+  {code:"GS003R", name:"細辛"},
+  {code:"GS010R", name:"葛根"},
+  {code:"GS032R", name:"白芷"},
+  {code:"GS061R", name:"地黃"},
+  {code:"GS071R", name:"桔梗"},
+  {code:"GS085R", name:"厚朴"},
+  {code:"GS092", name:"丹參"},
+  {code:"GS092RA", name:"丹參"},
+  {code:"GS092Z", name:"丹參"},
+  {code:"GS102R", name:"香附子"},
+  {code:"GS115AR", name:"黃耆"},
+  {code:"GS121", name:"續斷"},
+  {code:"GS121R", name:"續斷"},
+  {code:"GS143RA", name:"五味子"},
+  {code:"GS143RAZ", name:"五味子"},
+  {code:"GS174R", name:"炮附子"},
+  {code:"GS193", name:"板藍根"},
+  {code:"GS193A", name:"板藍根(余仁生)"},
+  {code:"GS193KA", name:"北板藍根"},
+  {code:"GS237R", name:"白芍藥"},
+  {code:"HC027B", name:"長大人升級版女方膠囊原料藥"},
+  {code:"HC032B", name:"登大人男膠囊原料藥"},
+  {code:"HF015", name:"靈芝菌絲體膠囊"},
+  {code:"HF025", name:"紅麴膠囊"},
+  {code:"HP008", name:"好筋固"},
+  {code:"J335", name:"順天堂極品龜鹿膠(龜鹿二仙膠)膠劑"},
+  {code:"J335J", name:"順天堂極品龜鹿膠(白參)(龜鹿二仙膠)膠劑"},
+  {code:"O200", name:"紫博士膏(紫雲膏) 油膏劑"},
+  {code:"O352", name:"\"寶吉祥\"寶圓膏(生肌玉紅膏) 油膏劑"},
+  {code:"P002H", name:"四物湯"},
+  {code:"P002HA", name:"四物湯"},
+  {code:"P002Z", name:"四物湯"},
+  {code:"P015HA", name:"桑菊飲"},
+  {code:"P029HA", name:"葛根黃芩黃連湯"},
+  {code:"P045HA", name:"當歸芍藥散"},
+  {code:"P067HA", name:"黃連解毒湯"},
+  {code:"P074HA", name:"辛夷散"},
+  {code:"P086HA", name:"麻杏甘石湯"},
+  {code:"P105HA", name:"荊防敗毒散"},
+  {code:"P116HA", name:"柴胡清肝湯"},
+  {code:"P139HA", name:"清胃散"},
+  {code:"P156HA", name:"當歸四逆湯"},
+  {code:"P187HA", name:"荊芥連翹湯"},
+  {code:"P223HA", name:"四逆湯"},
+  {code:"P225HA", name:"止嗽散"},
+  {code:"P233HA", name:"麻黃附子細辛湯"},
+  {code:"P255HA", name:"玉屏風散"},
+  {code:"P260HA", name:"黃耆五物湯"},
+  {code:"P264HA", name:"補陽還五湯"},
+  {code:"PS001", name:"麻黃"},
+  {code:"PS001Z", name:"麻黃"},
+  {code:"PS010", name:"葛根"},
+  {code:"PS010Z", name:"葛根"},
+  {code:"PS023", name:"車前子"},
+  {code:"PS024", name:"茯苓"},
+  {code:"PS024Z", name:"茯苓"},
+  {code:"PS032", name:"白芷"},
+  {code:"PS050", name:"黃連"},
+  {code:"PS051", name:"黃芩"},
+  {code:"PS051Z", name:"黃芩"},
+  {code:"PS052", name:"黃柏"},
+  {code:"PS057", name:"連翹"},
+  {code:"PS061AR", name:"熟地黃"},
+  {code:"PS064", name:"魚腥草"},
+  {code:"PS064Z", name:"魚腥草"},
+  {code:"PS065A", name:"牡丹皮"},
+  {code:"PS074A", name:"貝母"},
+  {code:"PS077D", name:"半夏"},
+  {code:"PS085K", name:"厚朴"},
+  {code:"PS086", name:"枳實"},
+  {code:"PS086A", name:"枳殼"},
+  {code:"PS086AZ", name:"枳殼"},
+  {code:"PS095", name:"延胡索"},
+  {code:"PS102", name:"香附子"},
+  {code:"PS102Z", name:"香附子"},
+  {code:"PS115", name:"黃耆"},
+  {code:"PS115A", name:"黃耆"},
+  {code:"PS115AZ", name:"黃耆"},
+  {code:"PS117", name:"甘草"},
+  {code:"PS117Z", name:"甘草"},
+  {code:"PS118R", name:"黨參"},
+  {code:"PS118RZ", name:"黨參"},
+  {code:"PS125R", name:"當歸"},
+  {code:"PS128", name:"川芎"},
+  {code:"PS133R", name:"枸杞子"},
+  {code:"PS133RZ", name:"枸杞子"},
+  {code:"PS134B", name:"酸棗仁"},
+  {code:"PS143J", name:"五味子(食益補)"},
+  {code:"PS143K", name:"五味子萃取物"},
+  {code:"PS227A", name:"桂枝"},
+  {code:"PS237", name:"白芍"},
+  {code:"PS237Z", name:"白芍"},
+  {code:"PS467", name:"靈芝"},
+  {code:"T001H", name:"補中益氣湯"},
+  {code:"T002H", name:"四物湯"},
+  {code:"T003H", name:"歸脾湯"},
+  {code:"T004H", name:"炙甘草湯"},
+  {code:"T005H", name:"六味地黃丸"},
+  {code:"T005HH", name:"六味地黃丸"},
+  {code:"T006H", name:"八味地黃丸"},
+  {code:"T008", name:"小建中湯"},
+  {code:"T009H", name:"參苓白朮散"},
+  {code:"T010", name:"天王補心丹"},
+  {code:"T011H", name:"十全大補湯"},
+  {code:"T013H", name:"桂枝湯"},
+  {code:"T014H", name:"葛根湯"},
+  {code:"T015", name:"桑菊飲"},
+  {code:"T018H", name:"小青龍湯"},
+  {code:"T018HA", name:"小青龍湯"},
+  {code:"T020H", name:"九味羌活湯"},
+  {code:"T021H", name:"十神湯"},
+  {code:"T022H", name:"川芎茶調散"},
+  {code:"T026", name:"清鼻湯"},
+  {code:"T027", name:"大柴胡湯"},
+  {code:"T028H", name:"防風通聖散"},
+  {code:"T033", name:"小柴胡湯"},
+  {code:"T034H", name:"逍遙散"},
+  {code:"T039", name:"柴胡加龍骨牡蠣湯"},
+  {code:"T040", name:"半夏厚朴湯"},
+  {code:"T042H", name:"定喘湯"},
+  {code:"T043", name:"桃核承氣湯"},
+  {code:"T043HA", name:"桃核承氣湯"},
+  {code:"T044H", name:"桂枝茯苓丸"},
+  {code:"T045", name:"當歸芍藥散"},
+  {code:"T055H", name:"藿香正氣散"},
+  {code:"T055HH", name:"藿香正氣散"},
+  {code:"T058", name:"五苓散"},
+  {code:"T059H", name:"豬苓湯"},
+  {code:"T061", name:"苓桂朮甘湯"},
+  {code:"T066", name:"麥門冬湯"},
+  {code:"T067H", name:"黃連解毒湯"},
+  {code:"T067HA", name:"黃連解毒湯"},
+  {code:"T071", name:"半夏瀉心湯"},
+  {code:"T074H", name:"辛夷散"},
+  {code:"T075H", name:"甘露飲"},
+  {code:"T077H", name:"龍膽瀉肝湯"},
+  {code:"T078", name:"乙字湯"},
+  {code:"T079H", name:"清心蓮子飲"},
+  {code:"T080", name:"平胃散"},
+  {code:"T081H", name:"安中散"},
+  {code:"T086H", name:"麻杏甘石湯"},
+  {code:"T091", name:"麻子仁丸"},
+  {code:"T094H", name:"百合固金湯"},
+  {code:"T098H", name:"香砂六君子湯"},
+  {code:"T106", name:"銀翹散"},
+  {code:"T106HA", name:"銀翹散"},
+  {code:"T106HH", name:"銀翹散"},
+  {code:"T113", name:"清上防風湯"},
+  {code:"T114H", name:"加味逍遙散"},
+  {code:"T114HH", name:"加味逍遙散"},
+  {code:"T133H", name:"疏經活血湯"},
+  {code:"T140H", name:"清肺湯"},
+  {code:"T142H", name:"蒼耳散"},
+  {code:"T145", name:"二陳湯"},
+  {code:"T164H", name:"消風散"},
+  {code:"T166HH", name:"獨活寄生湯"},
+  {code:"T176", name:"酸棗仁湯"},
+  {code:"T188", name:"清咽利膈湯"},
+  {code:"T201", name:"三黃錠"},
+  {code:"T225H", name:"止嗽散"},
+  {code:"T229H", name:"杞菊地黃丸"},
+  {code:"T234H", name:"還少丹"},
+  {code:"T235H", name:"辛夷清肺湯"},
+  {code:"T255H", name:"玉屏風散"},
+  {code:"T264HA", name:"補陽還五湯"},
+  {code:"T293", name:"複方丹參片"},
+  {code:"TB051C", name:"益壽二參(減量版)"},
+  {code:"TB051D", name:"益壽二參變方(減量版)"},
+  {code:"TB171", name:"寶頂(Beau Top)精華錠"},
+  {code:"TB171AA", name:"極品寶頂男性適用600mg精華錠"},
+  {code:"TB171AB", name:"極品寶頂男性適用500mg精華錠"},
+  {code:"TB171BA", name:"極品寶頂女性適用600mg精華錠"},
+  {code:"TB171BB", name:"極品寶頂女性適用500mg精華錠"},
+  {code:"TB171D", name:"寶頂(減量版)"},
+  {code:"TB171E", name:"寶頂(Beau Top)精華錠Placebo"},
+  {code:"X075D", name:"甘露飲XP(新加坡-余仁生)"},
+  {code:"X075E", name:"甘露飲XP(香港-余仁生)"},
+  {code:"X106", name:"銀翹散XP(余仁生)"},
+  {code:"X176", name:"酸棗仁湯XP(余仁生)"},
+  {code:"X225", name:"止嗽散XP(余仁生)"},
+  {code:"XA017A", name:"SC-101-20X-EX"},
+  {code:"XA017B", name:"SC-101-20X"},
+  {code:"XH01", name:"降脂湯XP(余仁生)"},
+  {code:"XH03", name:"降酸茶XP(余仁生)"},
+  {code:"XH05", name:"髮寶 Product 3 XP (H4H Hair Formula XP)"},
+  {code:"XH06", name:"美白去斑寶Product 7 XP (Spot Whitening XP)"},
+  {code:"XH09", name:"PH-001 XP(余仁生)"},
+  {code:"XH11", name:"健脾袪濕飲"},
+  {code:"XP107", name:"三棱XP"},
+  {code:"XS018C", name:"大黃"},
+  {code:"XS024", name:"茯苓XP(韓國)"},
+  {code:"XS050A", name:"黃連"},
+  {code:"XS051", name:"黃芩"},
+  {code:"XS051A", name:"黃芩"},
+  {code:"XS079", name:"陳皮"},
+  {code:"XS079A", name:"陳皮"},
+  {code:"XS108", name:"莪朮XP"},
+  {code:"XS114", name:"人參"},
+  {code:"XS114A", name:"人參"},
+  {code:"XS114C", name:"白人參"},
+  {code:"XS115A", name:"黃耆浸膏浸膏劑"},
+  {code:"XS133", name:"枸杞子XP(韓國)"},
+  {code:"XS144", name:"山茱萸XP(韓國)"},
+  {code:"XS193", name:"板藍根XP(余仁生)"},
+  {code:"XS250", name:"山藥"},
+  {code:"Z176", name:"酸棘仁湯XP"},
+  {code:"GA019", name:"淨冠方"},
+  {code:"G356", name:"消風散去木通"},
+  {code:"G050H", name:"真武湯"},
+  {code:"PA013B", name:"台灣清冠一號"},
+  {code:"PA013A", name:"台灣清冠一號"},
+  {code:"CA019", name:"淨冠方"},
+  {code:"GA013J", name:"清冠一號"}
+];
+
+// 從 localStorage 載入
+function loadData() {
+  const saved = localStorage.getItem("medicineItems");
+  if (saved) {
+    try { items = JSON.parse(saved); } catch(e) { console.error("載入失敗，使用預設資料"); }
+  }
+  renderTable(items);
+}
+function saveData() {
+  localStorage.setItem("medicineItems", JSON.stringify(items));
+}
+
+// === 動態候選下拉清單 ===
+const suggestionBox = document.createElement("div");
+suggestionBox.id = "suggestionBox";
+suggestionBox.style.cssText = `
+  position: absolute; background: white; border: 1px solid #ccc; 
+  border-radius: 6px; max-height: 300px; overflow-y: auto; 
+  width: calc(100% - 32px); z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  display: none; left: 16px; top: 100%;
+`;
+document.querySelector(".search-box").style.position = "relative";
+document.getElementById("searchName").parentNode.style.position = "relative";
+document.getElementById("searchName").parentNode.appendChild(suggestionBox);
+
+document.getElementById("searchName").addEventListener("input", function(e) {
+  const keyword = this.value.trim();
+  suggestionBox.innerHTML = "";
+  
+  if (keyword === "") {
+    suggestionBox.style.display = "none";
+    return;
+  }
+
+  const matches = items
+    .filter(item => item.name.includes(keyword) || item.code.toUpperCase().includes(keyword.toUpperCase()))
+    .slice(0, 15); // 最多顯示 15 筆，避免太長
+
+  if (matches.length === 0) {
+    suggestionBox.innerHTML = `<div style="padding:10px; color:#999;">無符合項目</div>`;
+    suggestionBox.style.display = "block";
+    return;
+  }
+
+  matches.forEach(item => {
+    const div = document.createElement("div");
+    div.style.padding = "10px 12px";
+    div.style.cursor = "pointer";
+    div.style.borderBottom = "1px solid #eee";
+    div.innerHTML = `<strong>${item.code}</strong> - ${item.name.replace(
+      keyword, 
+      `<span style="background:#fffacd;">${keyword}</span>`
+    )}`;
+    div.onclick = () => {
+      document.getElementById("searchName").value = item.name;
+      document.getElementById("searchCode").value = item.code;
+      suggestionBox.style.display = "none";
+      search(); // 直接顯示搜尋結果
+    };
+    div.onmouseover = () => div.style.background = "#f5f5f5";
+    div.onmouseout = () => div.style.background = "white";
+    suggestionBox.appendChild(div);
+  });
+  
+  suggestionBox.style.display = "block";
+});
+
+// 點擊其他地方關閉下拉
+document.addEventListener("click", function(e) {
+  if (!document.getElementById("searchName").contains(e.target) && 
+      !suggestionBox.contains(e.target)) {
+    suggestionBox.style.display = "none";
+  }
+});
+
+// === 其餘功能不變（渲染、搜尋、新增、編輯、排序...）===
+function renderTable(data) {
+  const tbody = document.getElementById("tableBody");
+  tbody.innerHTML = "";
+  data.forEach((item, index) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${item.code}</td>
+      <td>${item.name}</td>
+      <td class="actions">
+        <button class="edit-btn" onclick="editItem(${index})">編輯</button>
+        <button class="cancel-btn" onclick="deleteItem(${index})" style="margin-left:4px; padding:6px 10px;">刪除</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// 新增刪除功能
+function deleteItem(index) {
+  if (confirm(`確定要刪除「${items[index].code} ${items[index].name}」嗎？`)) {
+    items.splice(index, 1);
+    saveData();
+    renderTable(items);
+    search();
+    showStatus("已刪除", "success");
+  }
+}
+
+function search() {
+  const codeInput = document.getElementById("searchCode").value.trim().toUpperCase();
+  const nameInput = document.getElementById("searchName").value.trim();
+  let filtered = items.filter(item => {
+    const codeMatch = !codeInput || item.code.toUpperCase().includes(codeInput);
+    const nameMatch = !nameInput || item.name.includes(nameInput);
+    return codeMatch && nameMatch;
+  });
+  renderTable(filtered);
+  suggestionBox.style.display = "none"; // 搜尋後關閉提示
+}
+
+function resetSearch() {
+  document.getElementById("searchCode").value = "";
+  document.getElementById("searchName").value = "";
+  renderTable(items);
+  suggestionBox.style.display = "none";
+}
+
+let editingIndex = -1;
+function editItem(index) {
+  editingIndex = index;
+  const item = items[index];
+  document.getElementById("editCode").value = item.code;
+  document.getElementById("editName").value = item.name;
+  document.getElementById("addForm").style.display = "block";
+}
+
+function saveItem() {
+  const code = document.getElementById("editCode").value.trim().toUpperCase();
+  const name = document.getElementById("editName").value.trim();
+  if (!code || !name) {
+    showStatus("編號與品名皆為必填！", "error");
+    return;
+  }
+  // 檢查重複（除了自己以外）
+  const duplicate = items.find((it, i) => it.code === code && i !== editingIndex);
+  if (duplicate) {
+    showStatus("此編號已存在！", "error");
+    return;
+  }
+
+  if (editingIndex === -1) {
+    items.push({code, name});
+  } else {
+    items[editingIndex] = {code, name};
+  }
+  saveData();
+  hideAddForm();
+  renderTable(items);
+  search();
+  showStatus("儲存成功！", "success");
+}
+
+function showAddForm() {
+  editingIndex = -1;
+  document.getElementById("editCode").value = "";
+  document.getElementById("editName").value = "";
+  document.getElementById("addForm").style.display = "block";
+}
+function hideAddForm() {
+  document.getElementById("addForm").style.display = "none";
+}
+
+function showStatus(msg, type = "success") {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.className = type;
+  el.style.display = "block";
+  setTimeout(() => el.style.display = "none", 3000);
+}
+
+let sortDirection = 1;
+function sortTable(col) {
+  items.sort((a, b) => {
+    let x = col === 0 ? a.code : a.name;
+    let y = col === 0 ? b.code : b.name;
+    return sortDirection * x.localeCompare(y, 'zh-TW');
+  });
+  sortDirection *= -1;
+  renderTable(items);
+  search(); // 保持目前搜尋結果也排序
+}
+
+// 初始化
+loadData();
+</script>
+</body>
+</html>
