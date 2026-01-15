@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>中藥品項查詢與編輯系統</title>
+  <title>中藥品項查詢與編輯系統 - 強制更新版 (2026.01)</title>
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; margin: 20px; background: #f9f9f9; color: #333; }
     h1 { text-align: center; color: #2c3e50; }
@@ -27,11 +27,26 @@
     #status { margin: 10px 0; padding: 10px; border-radius: 6px; display: none; }
     .success { background: #d4edda; color: #155724; }
     .error { background: #f8d7da; color: #721c24; }
+    #version-warning {
+      background: #fff3cd;
+      color: #856404;
+      padding: 12px;
+      margin: 15px 0;
+      border-radius: 6px;
+      border: 1px solid #ffeeba;
+      text-align: center;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
 <div class="container">
   <h1>中藥品項查詢與編輯系統</h1>
+  <div id="version-warning">
+    【強制更新版本 - 2026.01.15】<br>
+    請使用最新版本，若資料未更新請按 F5 或 Ctrl + F5 強制重新載入頁面
+  </div>
+
   <div class="search-box">
     <input type="text" id="searchCode" placeholder="輸入編號查詢（如 B005H、G259）" style="flex:1;" />
     <input type="text" id="searchName" placeholder="輸入品名關鍵字（如 六味地黃、補中益氣、清冠）" style="flex:2;" />
@@ -39,6 +54,7 @@
     <button id="addBtn" onclick="showAddForm()">新增品項</button>
     <button onclick="resetSearch()">顯示全部</button>
   </div>
+
   <div id="addForm" style="display:none; margin:20px 0; padding:15px; background:#fff; border:1px solid #ddd; border-radius:8px;">
     <h3>新增 / 編輯品項</h3>
     <input type="text" id="editCode" placeholder="編號（必填）" style="width:200px;" />
@@ -48,7 +64,9 @@
       <button class="cancel-btn" onclick="hideAddForm()">取消</button>
     </div>
   </div>
+
   <div id="status"></div>
+
   <table id="itemTable">
     <thead>
       <tr>
@@ -60,8 +78,26 @@
     <tbody id="tableBody"></tbody>
   </table>
 </div>
+
 <script>
-// 完整資料（已從你的清單去重複、整理）
+// === 強制更新版本標記 ===
+const FORCE_UPDATE_VERSION = "20260115";
+const LAST_UPDATE_KEY = "medicineLastUpdateVer";
+
+function checkForceUpdate() {
+  const savedVer = localStorage.getItem(LAST_UPDATE_KEY);
+  if (savedVer !== FORCE_UPDATE_VERSION) {
+    if (confirm("系統已強制更新至最新版本（2026.01）。\n是否清除舊資料並使用新版本？\n（按取消將繼續使用舊資料，但可能有相容性問題）")) {
+      localStorage.removeItem("medicineItems");
+      localStorage.setItem(LAST_UPDATE_KEY, FORCE_UPDATE_VERSION);
+      location.reload();
+    } else {
+      localStorage.setItem(LAST_UPDATE_KEY, FORCE_UPDATE_VERSION);
+    }
+  }
+}
+
+// 完整資料（你原來提供的全部內容，已去重複整理）
 let items = [
   {code:"B005H", name:"六味地黃丸丸劑"},
   {code:"B005HA", name:"六味地黃丸丸劑"},
@@ -757,16 +793,17 @@ function loadData() {
   }
   renderTable(items);
 }
+
 function saveData() {
   localStorage.setItem("medicineItems", JSON.stringify(items));
 }
 
-// === 動態候選下拉清單 ===
+// 動態候選下拉清單
 const suggestionBox = document.createElement("div");
 suggestionBox.id = "suggestionBox";
 suggestionBox.style.cssText = `
-  position: absolute; background: white; border: 1px solid #ccc; 
-  border-radius: 6px; max-height: 300px; overflow-y: auto; 
+  position: absolute; background: white; border: 1px solid #ccc;
+  border-radius: 6px; max-height: 300px; overflow-y: auto;
   width: calc(100% - 32px); z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   display: none; left: 16px; top: 100%;
 `;
@@ -777,54 +814,48 @@ document.getElementById("searchName").parentNode.appendChild(suggestionBox);
 document.getElementById("searchName").addEventListener("input", function(e) {
   const keyword = this.value.trim();
   suggestionBox.innerHTML = "";
-  
   if (keyword === "") {
     suggestionBox.style.display = "none";
     return;
   }
-
   const matches = items
     .filter(item => item.name.includes(keyword) || item.code.toUpperCase().includes(keyword.toUpperCase()))
-    .slice(0, 15); // 最多顯示 15 筆，避免太長
-
+    .slice(0, 15);
   if (matches.length === 0) {
     suggestionBox.innerHTML = `<div style="padding:10px; color:#999;">無符合項目</div>`;
     suggestionBox.style.display = "block";
     return;
   }
-
   matches.forEach(item => {
     const div = document.createElement("div");
     div.style.padding = "10px 12px";
     div.style.cursor = "pointer";
     div.style.borderBottom = "1px solid #eee";
     div.innerHTML = `<strong>${item.code}</strong> - ${item.name.replace(
-      keyword, 
+      keyword,
       `<span style="background:#fffacd;">${keyword}</span>`
     )}`;
     div.onclick = () => {
       document.getElementById("searchName").value = item.name;
       document.getElementById("searchCode").value = item.code;
       suggestionBox.style.display = "none";
-      search(); // 直接顯示搜尋結果
+      search();
     };
     div.onmouseover = () => div.style.background = "#f5f5f5";
     div.onmouseout = () => div.style.background = "white";
     suggestionBox.appendChild(div);
   });
-  
   suggestionBox.style.display = "block";
 });
 
-// 點擊其他地方關閉下拉
 document.addEventListener("click", function(e) {
-  if (!document.getElementById("searchName").contains(e.target) && 
+  if (!document.getElementById("searchName").contains(e.target) &&
       !suggestionBox.contains(e.target)) {
     suggestionBox.style.display = "none";
   }
 });
 
-// === 其餘功能不變（渲染、搜尋、新增、編輯、排序...）===
+// 其餘功能
 function renderTable(data) {
   const tbody = document.getElementById("tableBody");
   tbody.innerHTML = "";
@@ -842,7 +873,6 @@ function renderTable(data) {
   });
 }
 
-// 新增刪除功能
 function deleteItem(index) {
   if (confirm(`確定要刪除「${items[index].code} ${items[index].name}」嗎？`)) {
     items.splice(index, 1);
@@ -862,7 +892,7 @@ function search() {
     return codeMatch && nameMatch;
   });
   renderTable(filtered);
-  suggestionBox.style.display = "none"; // 搜尋後關閉提示
+  suggestionBox.style.display = "none";
 }
 
 function resetSearch() {
@@ -873,6 +903,7 @@ function resetSearch() {
 }
 
 let editingIndex = -1;
+
 function editItem(index) {
   editingIndex = index;
   const item = items[index];
@@ -888,13 +919,11 @@ function saveItem() {
     showStatus("編號與品名皆為必填！", "error");
     return;
   }
-  // 檢查重複（除了自己以外）
   const duplicate = items.find((it, i) => it.code === code && i !== editingIndex);
   if (duplicate) {
     showStatus("此編號已存在！", "error");
     return;
   }
-
   if (editingIndex === -1) {
     items.push({code, name});
   } else {
@@ -913,6 +942,7 @@ function showAddForm() {
   document.getElementById("editName").value = "";
   document.getElementById("addForm").style.display = "block";
 }
+
 function hideAddForm() {
   document.getElementById("addForm").style.display = "none";
 }
@@ -934,10 +964,11 @@ function sortTable(col) {
   });
   sortDirection *= -1;
   renderTable(items);
-  search(); // 保持目前搜尋結果也排序
+  search();
 }
 
 // 初始化
+checkForceUpdate();
 loadData();
 </script>
 </body>
