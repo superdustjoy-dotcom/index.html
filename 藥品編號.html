@@ -27,6 +27,7 @@
     #status { margin: 10px 0; padding: 10px; border-radius: 6px; display: none; }
     .success { background: #d4edda; color: #155724; }
     .error { background: #f8d7da; color: #721c24; }
+    .version-tag { text-align: right; font-size: 12px; color: #999; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -34,8 +35,8 @@
   <h1>中藥品項查詢與編輯系統</h1>
 
   <div class="search-box">
-    <input type="text" id="searchCode" placeholder="輸入編號查詢（如 B005H、G259）" style="flex:1;" />
-    <input type="text" id="searchName" placeholder="輸入品名關鍵字（如 六味地黃、補中益氣、清冠）" style="flex:2;" />
+    <input type="text" id="searchCode" placeholder="輸入編號查詢（如 B005H、101906）" style="flex:1;" />
+    <input type="text" id="searchName" placeholder="輸入品名或人員關鍵字" style="flex:2;" />
     <button onclick="search()">搜尋</button>
     <button id="addBtn" onclick="showAddForm()">新增品項</button>
     <button onclick="resetSearch()">顯示全部</button>
@@ -44,7 +45,7 @@
   <div id="addForm" style="display:none; margin:20px 0; padding:15px; background:#fff; border:1px solid #ddd; border-radius:8px;">
     <h3>新增 / 編輯品項</h3>
     <input type="text" id="editCode" placeholder="編號（必填）" style="width:200px;" />
-    <input type="text" id="editName" placeholder="完整品名" style="width:500px;" />
+    <input type="text" id="editName" placeholder="完整品名 / 姓名" style="width:500px;" />
     <div style="margin-top:12px;">
       <button class="save-btn" onclick="saveItem()">儲存</button>
       <button class="cancel-btn" onclick="hideAddForm()">取消</button>
@@ -57,21 +58,23 @@
     <thead>
       <tr>
         <th onclick="sortTable(0)">編號</th>
-        <th onclick="sortTable(1)">品名</th>
+        <th onclick="sortTable(1)">品名 / 姓名</th>
         <th>操作</th>
       </tr>
     </thead>
     <tbody id="tableBody"></tbody>
   </table>
+  <div class="version-tag" id="versionDisplay"></div>
 </div>
 
 <script>
-// 版本代碼（可自行修改此值來標記不同版本）
-const APP_VERSION = "20260115";
+// 版本代碼：更新為 20260115-V2
+const APP_VERSION = "20260115-V2";
+document.getElementById("versionDisplay").textContent = "版本號：" + APP_VERSION;
 
 let items = [
   {code:"B005H", name:"六味地黃丸丸劑"},
-    {code:"B005HA", name:"六味地黃丸丸劑"},
+  {code:"B005HA", name:"六味地黃丸丸劑"},
   {code:"B005HH", name:"六味地黃丸丸劑"},
   {code:"B006H", name:"固腎丸(八味地黃丸)丸劑"},
   {code:"B010", name:"天王補心丸(去硃砂)丸劑"},
@@ -753,14 +756,43 @@ let items = [
   {code:"PA013B", name:"台灣清冠一號"},
   {code:"PA013A", name:"台灣清冠一號"},
   {code:"CA019", name:"淨冠方"},
-  {code:"GA013J", name:"清冠一號"}
+  {code:"GA013J", name:"清冠一號"},
+  // 新增人員名單
+  {code:"101906", name:"陳逢春"},
+  {code:"100837", name:"張景智"},
+  {code:"100215", name:"林正珮"},
+  {code:"100274", name:"蔡瑞珠"},
+  {code:"100368", name:"周生德"},
+  {code:"100407", name:"林佳靜"},
+  {code:"100505", name:"林雪瑜"},
+  {code:"100528", name:"林秀鳳"},
+  {code:"100591", name:"翁榮道"},
+  {code:"101679", name:"林世祥"},
+  {code:"101813", name:"羅怡婷"},
+  {code:"101819", name:"陳佳卉"},
+  {code:"101964", name:"司祈恩"},
+  {code:"101997", name:"余蕙如"},
+  {code:"102022", name:"謝嫚珊"},
+  {code:"102038", name:"王振豪"},
+  {code:"102058", name:"洪浚富"},
+  {code:"102067", name:"吳紫綾"},
+  {code:"102089", name:"王思涵"},
+  {code:"102116", name:"張昱萱"},
+  {code:"102125", name:"林秉蓁"},
+  {code:"102126", name:"王鈺婷"},
+  {code:"102131", name:"李承鈞"}
 ];
 
 // 從 localStorage 載入（保持原有邏輯）
 function loadData() {
   const saved = localStorage.getItem("medicineItems");
   if (saved) {
-    try { items = JSON.parse(saved); } catch(e) { console.error("載入失敗，使用預設資料"); }
+    try { 
+      const parsed = JSON.parse(saved);
+      // 這裡可以選擇是否要讓儲存的資料蓋過預設資料
+      // 若要保留新加入的代碼，建議用編號作為 Key 去 Merge，或者直接重新存一次
+      items = parsed; 
+    } catch(e) { console.error("載入失敗，使用預設資料"); }
   }
   renderTable(items);
 }
@@ -769,7 +801,7 @@ function saveData() {
   localStorage.setItem("medicineItems", JSON.stringify(items));
 }
 
-// 動態候選下拉清單（保持原樣）
+// 動態候選下拉清單
 const suggestionBox = document.createElement("div");
 suggestionBox.id = "suggestionBox";
 suggestionBox.style.cssText = `
@@ -826,7 +858,6 @@ document.addEventListener("click", function(e) {
   }
 });
 
-// 表格渲染、搜尋、編輯、刪除、排序等功能（保持原樣）
 function renderTable(data) {
   const tbody = document.getElementById("tableBody");
   tbody.innerHTML = "";
@@ -881,6 +912,7 @@ function editItem(index) {
   document.getElementById("editCode").value = item.code;
   document.getElementById("editName").value = item.name;
   document.getElementById("addForm").style.display = "block";
+  window.scrollTo(0, 0);
 }
 
 function saveItem() {
@@ -943,5 +975,3 @@ loadData();
 </script>
 </body>
 </html>
-
-
